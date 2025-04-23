@@ -60,6 +60,8 @@ xmlns:ser="http://lemontech.com.br/selfbooking/wsselfbooking/services">
 
         response = requests.post(URL_API, data=xml, headers=HEADERS)
         print(f"✅ Enviado: {row['codigoCentroDeCusto']} - {row['descricaoCentroDeCusto']} | Status: {response.status_code}")
+        print("📨 Resposta da API:")
+        print(response.text)
 
 # === Enviar funcionário ===
 def enviar_funcionarios():
@@ -73,7 +75,28 @@ def enviar_funcionarios():
         print("❌ Nenhum arquivo de funcionário encontrado.")
         return
 
+    # De-paras
+    mapa_genero = {'F': 'FEMININO', 'M': 'MASCULINO'}
+    mapa_perfil_funcionario = {'2': 'GESTOR', '3': 'APROVADOR', '4': 'SOLICITANTE', '6': 'PASSAGEIRO', '10': 'APROVADOR MASTER'}
+    mapa_perfil_aereo = {'1': 'ECONOMICA', '2': 'EXECUTIVA', '3': 'PRIMEIRA_CLASSE', '4': 'ECONOMICA_PLUS'}
+
     for _, row in df.iterrows():
+        if str(row['operacao']).strip().upper() != "A":
+            continue
+
+        # Transformações
+        data_nascimento = pd.to_datetime(row['dataNascimento'], dayfirst=True).strftime('%Y-%m-%d') if pd.notnull(row['dataNascimento']) else ''
+        sexo = mapa_genero.get(str(row['genero']).strip().upper(), '')
+        perfil_func = mapa_perfil_funcionario.get(str(row['perfilFuncionario']).strip(), '')
+        perfil_aereo = mapa_perfil_aereo.get(str(row['perfilAereo']).strip(), '')
+        auto_aprova = str(row['autoAprovar']).strip().upper() == "S"
+        solicita_para_todos = str(row['solicitaParaTodos']).strip().upper() == "S"
+        bypass_nacional = str(row['aprovacaoAutomaticaNacional']).strip().upper() == "S"
+        bypass_internacional = str(row['aprovacaoAutomaticaInternacional']).strip().upper() == "S"
+        utiliza_logado = str(row['utilizaUsuarioLogado']).strip().upper() == "S"
+        bloqueia_viajar = str(row['bloqueiaUsuarioParaViajar']).strip().upper() == "S"
+        ativo = "false" if str(row['ativo']).strip().upper() == "N" else "true"
+
         xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ser="http://lemontech.com.br/selfbooking/wsselfbooking/services">
    <soapenv:Header>
@@ -89,14 +112,14 @@ def enviar_funcionarios():
             <departamento>{row['departamento']}</departamento>
             <cargo>{row['cargo']}</cargo>
             <cpf>{row['cpf']}</cpf>
-            <dataNascimento>{row['dataNascimento'].date() if pd.notnull(row['dataNascimento']) else ''}</dataNascimento>
-            <sexo>{row['sexo']}</sexo>
+            <dataNascimento>{data_nascimento}</dataNascimento>
+            <sexo>{sexo}</sexo>
             <subCentroDeCustoRef>
-               <codigo>{row['subCentroDeCusto']}</codigo>
+               <codigo>{row['codigoSubCentroDeCusto']}</codigo>
                <centroDeCustoRef>
-                  <codigo>{row['centroDeCusto']}</codigo>
+                  <codigo>{row['codigoCentroDeCusto']}</codigo>
                   <regionalRef>
-                     <codigo>{row['regional']}</codigo>
+                     <codigo>{row['codigoRegional']}</codigo>
                   </regionalRef>
                </centroDeCustoRef>
             </subCentroDeCustoRef>
@@ -108,24 +131,24 @@ def enviar_funcionarios():
                <ddiCelular>{row['ddiCelular']}</ddiCelular>
                <dddCelular>{row['dddCelular']}</dddCelular>
                <celular>{row['celular']}</celular>
-               <forcaAtualizacao>false</forcaAtualizacao>
+               <forcaAtualizacao>true</forcaAtualizacao>
             </contato>
             <login>
-               <usuario>{row['usuario']}</usuario>
+               <usuario>{row['login']}</usuario>
             </login>
-            <bypassAprovacaoNacional>{row['aprovacaoAutomaticaNacional']}</bypassAprovacaoNacional>
-            <bypassAprovacaoInternacional>{row['aprovacaoAutomaticaInternacional']}</bypassAprovacaoInternacional>
+            <bypassAprovacaoNacional>{str(bypass_nacional).lower()}</bypassAprovacaoNacional>
+            <bypassAprovacaoInternacional>{str(bypass_internacional).lower()}</bypassAprovacaoInternacional>
             <configuracao>
-               <autoAprova>{row['autoAprovar']}</autoAprova>
-               <solicitaParaTodos>{row['solicitaParaTodos']}</solicitaParaTodos>
+               <autoAprova>{str(auto_aprova).lower()}</autoAprova>
+               <solicitaParaTodos>{str(solicita_para_todos).lower()}</solicitaParaTodos>
                <categoriaHospedagem>{row['categoriaHospedagem']}</categoriaHospedagem>
-               <perfilFuncionario>{row['perfilFuncionario']}</perfilFuncionario>
-               <perfilAereo>{row['perfilAereo']}</perfilAereo>
-               <utilizaUsuarioLogado>{row['utilizaUsuarioLogado']}</utilizaUsuarioLogado>
-               <bloqueiaUsuarioParaViajar>{row['bloqueiaUsuarioParaViajar']}</bloqueiaUsuarioParaViajar>
-               <emailEnvioCopiaDeVoucher>{row['emailEnvioCopiaDeVoucher']}</emailEnvioCopiaDeVoucher>
+               <perfilFuncionario>{perfil_func}</perfilFuncionario>
+               <perfilAereo>{perfil_aereo}</perfilAereo>
+               <utilizaUsuarioLogado>{str(utiliza_logado).lower()}</utilizaUsuarioLogado>
+               <bloqueiaUsuarioParaViajar>{str(bloqueia_viajar).lower()}</bloqueiaUsuarioParaViajar>
+               <emailEnvioCopiaDeVoucher>{row.get('emailEnvioCopiaDeVoucher', '')}</emailEnvioCopiaDeVoucher>
             </configuracao>
-            <ativo>{row['ativo']}</ativo>
+            <ativo>{ativo}</ativo>
          </funcionario>
       </ser:cadastrarFuncionario>
    </soapenv:Body>
@@ -133,6 +156,9 @@ def enviar_funcionarios():
 
         response = requests.post(URL_API, data=xml, headers=HEADERS)
         print(f"✅ Enviado funcionário: {row['matricula']} - {row['nome']} | Status: {response.status_code}")
+        print("📨 Resposta da API:")
+        print(response.text)
+
 
 # === Execução principal ===
 if __name__ == "__main__":
